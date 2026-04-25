@@ -170,8 +170,66 @@ Each menu option provides:
 
 ---
 
+### 4. ROCm + Ollama Initializer (CachyOS)
+
+One-shot setup script that installs and configures ROCm and Ollama for running LLMs on an AMD GPU under CachyOS (and other Arch-based distributions).
+
+**Script:** [`setup_rocm_ollama_cachyos.sh`](setup_rocm_ollama_cachyos.sh)
+
+**Features:**
+- Detects AMD GPU and warns if none is found
+- Installs ROCm packages via `pacman` (`rocm-opencl-runtime`, `rocm-hip-runtime`, `rocm-smi-lib`, `rocm-device-libs`, `hip-runtime-amd`, `rocminfo`)
+- Adds the current user to the `render` and `video` groups required for GPU access
+- Writes a `/etc/profile.d/rocm.sh` environment file (`ROCM_PATH`, `HIP_PATH`, `LD_LIBRARY_PATH`)
+- Auto-detects GPU GFX version (e.g. `gfx1030`, `gfx1100`) and sets `HSA_OVERRIDE_GFX_VERSION` for unsupported cards, with a manual fallback prompt
+- Installs Ollama (via `pacman`, AUR helper `yay`/`paru`, or the official installer as a fallback)
+- Creates a systemd drop-in (`/etc/systemd/system/ollama.service.d/rocm.conf`) so the service inherits ROCm environment variables
+- Enables and starts (or restarts) the `ollama` systemd service
+- Runs a post-install verification with `rocminfo` and `rocm-smi`
+
+**Usage:**
+```bash
+sudo ./setup_rocm_ollama_cachyos.sh
+```
+
+**Prerequisites:**
+- CachyOS or another Arch-based distribution
+- AMD GPU (ROCm-supported or with a known GFX override)
+- Root / sudo access
+- Internet connection (for package downloads)
+
+**Post-setup steps:**
+1. Log out and back in (or reboot) so group membership changes (`render`/`video`) take effect.
+2. Source the ROCm environment in the current shell:
+   ```bash
+   source /etc/profile.d/rocm.sh
+   ```
+3. Pull and run an LLM:
+   ```bash
+   ollama pull llama3
+   ollama run llama3
+   ```
+4. Verify GPU utilization:
+   ```bash
+   rocm-smi --showutilization
+   ```
+
+**GFX Version Reference:**
+
+| GPU Series | HSA_OVERRIDE_GFX_VERSION |
+|------------|--------------------------|
+| RX 6000 (RDNA 2) | `1030` |
+| RX 7900 (RDNA 3) | `1100` |
+| RX 7800 / 7700 (RDNA 3) | `1101` |
+
+**How It Works:**
+The script installs all required ROCm userspace libraries, configures the runtime environment persistently via `/etc/profile.d/rocm.sh`, and injects those same variables into the Ollama systemd service unit via a drop-in override file so that GPU acceleration is available both interactively and as a background service.
+
+---
+
 ## Supported Hardware
 
 - **Memory Optimizer:** AMD Ryzen AI Max+ Pro 395 (and other APUs with shared memory)
 - **Ollama Model Manager:** Any system running Ollama (Linux, macOS, Windows with WSL2)
 - **AMD System Tools:** AMD CPU + AMD GPU systems with ROCm installed
+- **ROCm + Ollama Initializer:** CachyOS and Arch-based distributions with an AMD GPU (RDNA 2 / RDNA 3 recommended)
