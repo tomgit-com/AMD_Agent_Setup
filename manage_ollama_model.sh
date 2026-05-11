@@ -54,13 +54,13 @@ pull_model() {
 
 parse_modelfile_params() {
     local modelfile_path="$1"
-    
+
     if [[ ! -f "$modelfile_path" ]]; then
         return
     fi
-    
+
     while IFS= read -r line; do
-        if [[ "$line" =~ ^PARAMETER\ +context_window\ +([0-9]+) ]]; then
+        if [[ "$line" =~ ^PARAMETER\ +num_ctx\ +([0-9]+) ]]; then
             echo "context:${BASH_REMATCH[1]}"
         elif [[ "$line" =~ ^PARAMETER\ +temperature\ +([0-9.]+) ]]; then
             echo "temperature:${BASH_REMATCH[1]}"
@@ -92,73 +92,118 @@ get_valid_temperature() {
     fi
 }
 
+select_model_from_list() {
+    local prompt="$1"
+    local models="$2"
+
+    if [[ -z "$models" ]]; then
+        echo ""
+        return 1
+    fi
+
+    local model_array=()
+    while IFS= read -r model; do
+        model_array+=("$model")
+    done <<< "$models"
+
+    echo "Available models:"
+    local i=1
+    for model in "${model_array[@]}"; do
+        echo "  $i. $model"
+        ((i++))
+    done
+    echo ""
+
+    local selection
+    read -p "$prompt (number or name): " selection
+
+    # Check if input is a number
+    if [[ "$selection" =~ ^[0-9]+$ ]]; then
+        local index=$((selection - 1))
+        if [[ $index -ge 0 && $index -lt ${#model_array[@]} ]]; then
+            echo "${model_array[$index]}"
+            return 0
+        else
+            echo ""
+            return 1
+        fi
+    else
+        # Input is a name, verify it exists
+        if echo "$models" | grep -q "^${selection}$"; then
+            echo "$selection"
+            return 0
+        else
+            echo ""
+            return 1
+        fi
+    fi
+}
+
 modify_model() {
     echo ""
     echo "=== Modify Existing Model ==="
-    
+
     local models
     models=$(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -v '<none>' || true)
-    
+
     if [[ -z "$models" ]]; then
         echo "No models found. Please pull a model first."
         return
     fi
-    
-    echo "Available models:"
-    echo "$models"
-    echo ""
-    
+
     local model_name
-    model_name=$(get_required_input "Enter model name to modify: ")
-    
-    if ! echo "$models" | grep -q "^${model_name}$"; then
-        echo "Model '$model_name' not found. Available models:"
-        echo "$models"
+    model_name=$(select_model_from_list "Select model to modify" "$models")
+
+    if [[ -z "$model_name" ]]; then
+        echo "Invalid selection. Operation cancelled."
         return
     fi
-    
+
+    echo "Selected model: $model_name"
+    echo ""
+
     local context_size=4096
     local temperature=0.7
     local modelfile="/tmp/Modelfile.$$"
-    
+
     if ollama show "$model_name" --output-modelfile >"$modelfile" 2>/dev/null; then
         local params
         params=$(parse_modelfile_params "$modelfile")
-        
+
         if echo "$params" | grep -q "^context:"; then
             context_size=$(echo "$params" | grep "^context:" | cut -d: -f2)
         fi
-        
+
         if echo "$params" | grep -q "^temperature:"; then
             temperature=$(echo "$params" | grep "^temperature:" | cut -d: -f2)
         fi
     fi
-    
+
     echo ""
     echo "Current parameters:"
     echo "  Context window: $context_size"
     echo "  Temperature: $temperature"
     echo ""
-    
+
     context_size=$(get_valid_context "$context_size")
     temperature=$(get_valid_temperature "$temperature")
-    
+
     echo ""
     echo "Creating modified model..."
     echo "FROM $model_name" > "$modelfile"
-    echo "PARAMETER context_window $context_size" >> "$modelfile"
+    echo "PARAMETER num_ctx $context_size" >> "$modelfile"
     echo "PARAMETER temperature $temperature" >> "$modelfile"
-    
+
     local new_name="${model_name}-modified-$(date +%Y%m%d%H%M%S)"
     read -p "New model name (default: $new_name): " input
     if [[ -n "$input" ]]; then
         new_name="$input"
     fi
-    
+
     echo ""
     ollama create "$new_name" -f "$modelfile"
     rm "$modelfile"
-    
+
     echo ""
     echo "✓ Model created: $new_name"
     echo "  Context window: $context_size"
@@ -168,46 +213,44 @@ modify_model() {
 create_model() {
     echo ""
     echo "=== Create New Model ==="
-    
+
     local models
     models=$(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -v '<none>' || true)
-    
+
     if [[ -z "$models" ]]; then
         echo "No base models found. Please pull a model first."
         return
     fi
-    
-    echo "Available base models:"
-    echo "$models"
-    echo ""
-    
+
     local base_model
-    base_model=$(get_required_input "Enter base model name: ")
-    
-    if ! echo "$models" | grep -q "^${base_model}$"; then
-        echo "Base model '$base_model' not found. Available models:"
-        echo "$models"
+    base_model=$(select_model_from_list "Select base model" "$models")
+
+    if [[ -z "$base_model" ]]; then
+        echo "Invalid selection. Operation cancelled."
         return
     fi
-    
+
+    echo "Selected base model: $base_model"
+    echo ""
+
     local model_name
     model_name=$(get_required_input "Enter new model name: ")
-    
+
     local context_size
     context_size=$(get_valid_context "4096")
-    
+
     local temperature
     temperature=$(get_valid_temperature "0.7")
-    
+
     echo ""
     echo "Creating model '$model_name' from '$base_model'..."
     echo "FROM $base_model" > "Modelfile"
-    echo "PARAMETER context_window $context_size" >> "Modelfile"
+    echo "PARAMETER num_ctx $context_size" >> "Modelfile"
     echo "PARAMETER temperature $temperature" >> "Modelfile"
-    
+
     ollama create "$model_name" -f Modelfile
     rm Modelfile
-    
+
     echo ""
     echo "✓ Model created: $model_name"
     echo "  Base model: $base_model"
