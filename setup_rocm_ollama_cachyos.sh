@@ -190,6 +190,92 @@ EOF
     echo "  ✓ ROCm environment written to $ROCM_ENV_FILE"
 }
 
+configure_user_bash_profile() {
+    local target_user="${SUDO_USER:-}"
+
+    if [ -z "$target_user" ]; then
+        echo ""
+        read -p "Enter the username to configure bash profile for: " target_user
+        if [ -z "$target_user" ]; then
+            echo "No user specified. Skipping bash profile configuration."
+            return
+        fi
+    fi
+
+    echo ""
+    echo "=== Configuring Bash Profile for '$target_user' ==="
+
+    if ! id "$target_user" &>/dev/null; then
+        echo "Error: User '$target_user' does not exist."
+        return
+    fi
+
+    local user_home
+    user_home=$(eval echo "~$target_user")
+    local bash_profile="${user_home}/.bash_profile"
+
+    # Create .bash_profile if it doesn't exist
+    if [ ! -f "$bash_profile" ]; then
+        touch "$bash_profile"
+        chown "$target_user:$target_user" "$bash_profile"
+        chmod 644 "$bash_profile"
+    fi
+
+    # Check if ROCm initialization is already present
+    if grep -q "# ROCm initialization" "$bash_profile" 2>/dev/null; then
+        echo "  ROCm initialization already present in $bash_profile"
+    else
+        # Add ROCm initialization to .bash_profile
+        cat >> "$bash_profile" <<'EOF'
+
+# ROCm initialization - Added by setup_rocm_ollama_cachyos.sh
+if [ -f /etc/profile.d/rocm.sh ]; then
+    source /etc/profile.d/rocm.sh
+fi
+EOF
+        chown "$target_user:$target_user" "$bash_profile"
+        echo "  ✓ ROCm initialization added to $bash_profile"
+    fi
+}
+
+change_shell_to_bash() {
+    local target_user="${SUDO_USER:-}"
+
+    if [ -z "$target_user" ]; then
+        echo ""
+        read -p "Enter the username to change shell for: " target_user
+        if [ -z "$target_user" ]; then
+            echo "No user specified. Skipping shell change."
+            return
+        fi
+    fi
+
+    echo ""
+    echo "=== Changing Default Shell to Bash for '$target_user' ==="
+
+    if ! id "$target_user" &>/dev/null; then
+        echo "Error: User '$target_user' does not exist."
+        return
+    fi
+
+    local current_shell
+    current_shell=$(getent passwd "$target_user" | cut -d: -f7)
+
+    if [ "$current_shell" = "/bin/bash" ] || [ "$current_shell" = "/usr/bin/bash" ]; then
+        echo "  User '$target_user' is already using bash as default shell."
+        return
+    fi
+
+    if [ ! -x "/bin/bash" ]; then
+        echo "  Error: /bin/bash not found or not executable."
+        return
+    fi
+
+    chsh -s /bin/bash "$target_user"
+    echo "  ✓ Changed default shell from '$current_shell' to '/bin/bash' for user '$target_user'"
+    echo "  Note: Shell change will take effect on next login."
+}
+
 install_ollama() {
     echo ""
     echo "=== Installing / Verifying Ollama ==="
@@ -203,16 +289,41 @@ install_ollama() {
 
     echo "Ollama not found. Attempting installation..."
 
-    if pacman -Si ollama &>/dev/null; then
-        pacman -S --noconfirm --needed ollama
-        echo "  ✓ Ollama installed via pacman."
-    elif command -v yay &>/dev/null; then
-        sudo -u "${SUDO_USER:-root}" yay -S --noconfirm --needed ollama
-        echo "  ✓ Ollama installed via yay (AUR)."
-    elif command -v paru &>/dev/null; then
-        sudo -u "${SUDO_USER:-root}" paru -S --noconfirm --needed ollama
-        echo "  ✓ Ollama installed via paru (AUR)."
-    else
+    # Try to install ollama-rocm first, then ollama-vulkan, then fall back to ollama
+    local installed=false
+
+    for pkg in ollama-rocm ollama-vulkan ollama; do
+        if pacman -Si "$pkg" &>/dev/null; then
+            pacman -S --noconfirm --needed "$pkg"
+            echo "  ✓ $pkg installed via pacman."
+            installed=true
+            break
+        fi
+    done
+
+    if [ "$installed" = false ]; then
+        if command -v yay &>/dev/null; then
+            for pkg in ollama-rocm ollama-vulkan ollama; do
+                if sudo -u "${SUDO_USER:-root}" yay -Si "$pkg" &>/dev/null; then
+                    sudo -u "${SUDO_USER:-root}" yay -S --noconfirm --needed "$pkg"
+                    echo "  ✓ $pkg installed via yay (AUR)."
+                    installed=true
+                    break
+                fi
+            done
+        elif command -v paru &>/dev/null; then
+            for pkg in ollama-rocm ollama-vulkan ollama; do
+                if sudo -u "${SUDO_USER:-root}" paru -Si "$pkg" &>/dev/null; then
+                    sudo -u "${SUDO_USER:-root}" paru -S --noconfirm --needed "$pkg"
+                    echo "  ✓ $pkg installed via paru (AUR)."
+                    installed=true
+                    break
+                fi
+            done
+        fi
+    fi
+
+    if [ "$installed" = false ]; then
         echo "Installing Ollama via official installer script..."
         curl -fsSL https://ollama.com/install.sh | sh
         echo "  ✓ Ollama installed via official installer."
@@ -302,12 +413,13 @@ print_summary() {
     echo ""
     echo "  ROCm packages:      installed"
     echo "  Environment file:   $ROCM_ENV_FILE"
+    echo "  Bash profile:       configured with ROCm initialization"
+    echo "  Default shell:      changed to bash (takes effect on next login)"
     echo "  Ollama service:     enabled & running"
     echo ""
     echo "  Next steps:"
-    echo "  1. Log out and back in (or reboot) for group changes to take effect."
-    echo "  2. Source the ROCm environment in your current shell:"
-    echo "       source $ROCM_ENV_FILE"
+    echo "  1. Log out and back in (or reboot) for group and shell changes to take effect."
+    echo "  2. ROCm environment will be automatically sourced on terminal startup."
     echo "  3. Pull an LLM model and run it on the GPU:"
     echo "       ollama pull llama3"
     echo "       ollama run llama3"
@@ -341,6 +453,8 @@ main() {
     install_rocm_packages
     add_user_to_groups
     configure_rocm_env
+    configure_user_bash_profile
+    change_shell_to_bash
     install_ollama
     configure_ollama_service
     verify_rocm
