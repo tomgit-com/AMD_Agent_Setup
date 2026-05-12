@@ -87,8 +87,11 @@ get_valid_temperature() {
     read -p "Temperature (default: $default, range 0.0-2.0): " input
     if [[ -z "$input" ]]; then
         echo "$default"
-    else
+    elif [[ "$input" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk "BEGIN {exit !(\"$input\" >= 0.0 && \"$input\" <= 2.0)}"; then
         echo "$input"
+    else
+        echo "Invalid temperature '$input', using default $default" >&2
+        echo "$default"
     fi
 }
 
@@ -128,8 +131,8 @@ select_model_from_list() {
             return 1
         fi
     else
-        # Input is a name, verify it exists
-        if echo "$models" | grep -q "^${selection}$"; then
+        # Input is a name, verify it exists (fixed-string to avoid regex injection)
+        if echo "$models" | grep -qxF "${selection}"; then
             echo "$selection"
             return 0
         else
@@ -244,12 +247,13 @@ create_model() {
 
     echo ""
     echo "Creating model '$model_name' from '$base_model'..."
-    echo "from $base_model" > "Modelfile"
-    echo "parameter num_ctx $context_size" >> "Modelfile"
-    echo "parameter temperature $temperature" >> "Modelfile"
+    local modelfile="/tmp/Modelfile.$$"
+    echo "from $base_model" > "$modelfile"
+    echo "parameter num_ctx $context_size" >> "$modelfile"
+    echo "parameter temperature $temperature" >> "$modelfile"
 
-    ollama create "$model_name" -f Modelfile
-    rm Modelfile
+    ollama create "$model_name" -f "$modelfile"
+    rm "$modelfile"
 
     echo ""
     echo "✓ Model created: $model_name"

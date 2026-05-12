@@ -75,8 +75,8 @@ detect_gfx_version() {
         gpu_id=$(lspci -nn 2>/dev/null | grep -i "amd\|radeon" | grep -i "vga\|display\|3d" | grep -oP '\[1002:[0-9a-f]+\]' | head -1 || true)
 
         case "$gpu_id" in
-            *[67900-6910]*)  gfx_version="gfx1030" ;;
-            *[73[0-9][0-9]]*)  gfx_version="gfx1100" ;;
+            *73[0-9a-f][0-9a-f]*)  gfx_version="gfx1030" ;;
+            *74[0-9a-f][0-9a-f]*)  gfx_version="gfx1100" ;;
         esac
     fi
 
@@ -92,8 +92,8 @@ install_rocm_packages() {
         exit 1
     fi
 
-    echo "Updating package database..."
-    pacman -Sy --noconfirm
+    echo "Updating package database and upgrading system..."
+    pacman -Syu --noconfirm
 
     echo ""
     echo "Installing ROCm packages: ${ROCM_PACKAGES[*]}"
@@ -162,8 +162,11 @@ configure_rocm_env() {
 
 export ROCM_PATH="${ROCM_PATH}"
 export HIP_PATH="${ROCM_PATH}"
-export PATH="\${PATH}:${ROCM_PATH}/bin"
-export LD_LIBRARY_PATH="\${LD_LIBRARY_PATH:-}:${ROCM_PATH}/lib:${ROCM_PATH}/lib64"
+case ":\${PATH}:" in
+    *":${ROCM_PATH}/bin:"*) ;;
+    *) export PATH="\${PATH}:${ROCM_PATH}/bin" ;;
+esac
+export LD_LIBRARY_PATH="\${LD_LIBRARY_PATH:+\${LD_LIBRARY_PATH}:}${ROCM_PATH}/lib:${ROCM_PATH}/lib64"
 EOF
 
     if [ -n "$gfx_version" ]; then

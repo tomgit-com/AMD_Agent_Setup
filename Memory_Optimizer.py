@@ -47,8 +47,10 @@ def main():
             print(f"  TARGET: {target_gb} GB")
             print(f"  PAGES:  {pages}")
             print("="*45)
+            mib = int(target_gb * 1024)
             print("\nAdd this to your GRUB_CMDLINE_LINUX_DEFAULT:")
-            print(f'ttm.pages_limit={pages} ttm.page_pool_size={pages}')
+            print(f'amdgpu.gttsize={mib}')
+            print(f'\n(Deprecated TTM equivalent for reference only: ttm.pages_limit={pages} ttm.page_pool_size={pages})')
             
         except ValueError:
             print("Please enter a valid number.")

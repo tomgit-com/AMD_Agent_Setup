@@ -126,7 +126,7 @@ memory_tuning() {
     
     case "$choice" in
         1)
-            echo "enalways" | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+            echo "always" | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
             echo "Done. Transparent huge pages: $(cat /sys/kernel/mm/transparent_hugepage/enabled)"
             ;;
         2)
@@ -211,7 +211,6 @@ amdgpu_driver_settings() {
     echo "Current driver info:"
     echo "--------------------"
     cat /sys/module/amdgpu/parameters/power_dpm_force_performance_level 2>/dev/null || echo "N/A"
-    cat /sys/module/amdgpu/parameters/pp_odclk电压 2>/dev/null || echo "N/A"
     
     echo ""
     echo "Available options:"
@@ -224,7 +223,7 @@ amdgpu_driver_settings() {
         1)
             if command -v rocm-smi &>/dev/null; then
                 echo "Power profile modes:"
-                rocm-smi --showmemoryinfo
+                rocm-smi --showmeminfo vram
             else
                 echo "rocm-smi not found"
             fi

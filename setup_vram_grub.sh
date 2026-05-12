@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Script to tune AMD APU shared-memory/GTT settings via GRUB
 # Note: this does not increase physical UMA VRAM; BIOS/UEFI controls that
 # Uses modern amdgpu.gttsize kernel parameter (replaces deprecated TTM)
@@ -198,13 +200,13 @@ main() {
         
         echo "Updating GRUB for $distro..."
         case "$distro" in
-            debian|ubuntu|cachyos)
+            debian|ubuntu)
                 update_grub_debian
                 ;;
             fedora)
                 update_grub_fedora
                 ;;
-            arch|manjaro|cachyos)
+            arch|manjaro|cachyos|endeavouros|garuda)
                 update_grub_arch
                 ;;
             centos|rhel|rocky|almalinux)
