@@ -4,9 +4,9 @@ Collection of utilities for system optimization and AI model management.
 
 ## 📋 Tools
 
-### 1. GPU Memory Allocator for APUs
+### 1. AMD APU Shared-Memory Tuner
 
-Configures GPU memory allocation for AMD APUs with shared memory by setting the `amdgpu.gttsize` kernel parameter.
+Configures the AMDGPU GTT/domain size for AMD APUs with shared memory by setting the `amdgpu.gttsize` kernel parameter.
 
 **Main Script:** [`setup_vram_grub.sh`](setup_vram_grub.sh)
 
@@ -30,6 +30,7 @@ sudo ./setup_vram_grub.sh [target_ram_gb]
 - Always backup your GRUB config before making changes
 - After modifying GRUB, the script automatically runs `update-grub` or `grub2-mkconfig`
 - This tool is for APUs with shared memory only, not discrete GPUs
+- Physical UMA VRAM reservation is controlled by BIOS/UEFI; this script only adjusts the kernel's GTT setting
 - Allocating >90% of RAM to GPU may cause system instability or OOM kills
 - Reboot required for changes to take effect
 

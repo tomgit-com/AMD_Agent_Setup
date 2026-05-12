@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Script to configure GPU memory allocation for AMD APUs via GRUB
+# Script to tune AMD APU shared-memory/GTT settings via GRUB
+# Note: this does not increase physical UMA VRAM; BIOS/UEFI controls that
 # Uses modern amdgpu.gttsize kernel parameter (replaces deprecated TTM)
 # Supports: Debian, Ubuntu, Fedora, Arch, CachyOS, CentOS/RHEL
 
@@ -35,6 +36,42 @@ check_privileges() {
 
 get_grub_file() {
     echo "/etc/default/grub"
+}
+
+update_grub_cmdline_param() {
+    local grub_file=$1
+    local param_name=$2
+    local param_value=$3
+    local temp_file
+
+    temp_file=$(mktemp)
+
+    if ! awk -v param_name="$param_name" -v param_value="$param_value" '
+        BEGIN {
+            updated = 0
+        }
+        /^GRUB_CMDLINE_LINUX(_DEFAULT)?="/ {
+            line = $0
+            sub(" " param_name "=[^\"]*", "", line)
+            sub(/"$/, " " param_name "=" param_value "\"", line)
+            print line
+            updated = 1
+            next
+        }
+        {
+            print
+        }
+        END {
+            if (updated == 0) {
+                exit 1
+            }
+        }
+    ' "$grub_file" > "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    mv "$temp_file" "$grub_file"
 }
 
 update_grub_debian() {
@@ -92,7 +129,9 @@ main() {
     distro=$(detect_distribution)
     total_ram=$(get_physical_ram_gb)
     
-    echo "--- AMD APU GPU Memory Allocator (amdgpu.gttsize) ---"
+    echo "--- AMD APU Shared-Memory Tuner (amdgpu.gttsize) ---"
+    echo "Note: BIOS/UEFI UMA settings control physical VRAM reservation."
+    echo "      This script only updates the GPU GTT/domain size parameter."
     
     if [ -n "$total_ram" ]; then
         echo "Detected System RAM: ${total_ram} GB"
@@ -112,7 +151,7 @@ main() {
         if [ -n "$input_val" ]; then
             target_gb=$input_val
         else
-            read -p "Enter target VRAM in GB [Default ${recommended_vram%%.*}]: " target_gb
+            read -p "Enter target shared-memory size in GB [Default ${recommended_vram%%.*}]: " target_gb
             if [ -z "$target_gb" ]; then
                 target_gb=$recommended_vram
             fi
@@ -152,7 +191,10 @@ main() {
             exit 0
         fi
 
-        sed -i 's/\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 amdgpu.gttsize='"$gttsize_mib"'"' "$grub_file"
+        if ! update_grub_cmdline_param "$grub_file" "amdgpu.gttsize" "$gttsize_mib"; then
+            echo "Failed to update GRUB config at $grub_file"
+            exit 1
+        fi
         
         echo "Updating GRUB for $distro..."
         case "$distro" in
@@ -173,9 +215,9 @@ main() {
                 ;;
         esac
         
-        echo "VRAM configuration applied successfully!"
+        echo "GRUB parameter applied successfully. Reboot and verify the boot cmdline."
     else
-        echo "No RAM available for VRAM allocation after system reserve."
+        echo "No RAM available for shared-memory tuning after system reserve."
     fi
 }
 
