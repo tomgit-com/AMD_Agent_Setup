@@ -60,9 +60,9 @@ parse_modelfile_params() {
     fi
 
     while IFS= read -r line; do
-        if [[ "$line" =~ ^PARAMETER\ +num_ctx\ +([0-9]+) ]]; then
+        if [[ "$line" =~ ^[Pp][Aa][Rr][Aa][Mm][Ee][Tt][Ee][Rr]\ +num_ctx\ +([0-9]+) ]]; then
             echo "context:${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^PARAMETER\ +temperature\ +([0-9.]+) ]]; then
+        elif [[ "$line" =~ ^[Pp][Aa][Rr][Aa][Mm][Ee][Tt][Ee][Rr]\ +temperature\ +([0-9.]+) ]]; then
             echo "temperature:${BASH_REMATCH[1]}"
         fi
     done < "$modelfile_path"
@@ -106,16 +106,16 @@ select_model_from_list() {
         model_array+=("$model")
     done <<< "$models"
 
-    echo "Available models:"
+    echo "Available models:" >&2
     local i=1
     for model in "${model_array[@]}"; do
-        echo "  $i. $model"
+        echo "  $i. $model" >&2
         ((i++))
     done
-    echo ""
+    echo "" >&2
 
     local selection
-    read -p "$prompt (number or name): " selection
+    read -p "$prompt (number or name): " selection >&2
 
     # Check if input is a number
     if [[ "$selection" =~ ^[0-9]+$ ]]; then
@@ -190,9 +190,9 @@ modify_model() {
 
     echo ""
     echo "Creating modified model..."
-    echo "FROM $model_name" > "$modelfile"
-    echo "PARAMETER num_ctx $context_size" >> "$modelfile"
-    echo "PARAMETER temperature $temperature" >> "$modelfile"
+    echo "from $model_name" > "$modelfile"
+    echo "parameter num_ctx $context_size" >> "$modelfile"
+    echo "parameter temperature $temperature" >> "$modelfile"
 
     local new_name="${model_name}-modified-$(date +%Y%m%d%H%M%S)"
     read -p "New model name (default: $new_name): " input
@@ -244,9 +244,9 @@ create_model() {
 
     echo ""
     echo "Creating model '$model_name' from '$base_model'..."
-    echo "FROM $base_model" > "Modelfile"
-    echo "PARAMETER num_ctx $context_size" >> "Modelfile"
-    echo "PARAMETER temperature $temperature" >> "Modelfile"
+    echo "from $base_model" > "Modelfile"
+    echo "parameter num_ctx $context_size" >> "Modelfile"
+    echo "parameter temperature $temperature" >> "Modelfile"
 
     ollama create "$model_name" -f Modelfile
     rm Modelfile

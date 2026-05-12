@@ -4,16 +4,16 @@ Collection of utilities for system optimization and AI model management.
 
 ## 📋 Tools
 
-### 1. Memory Optimizer
+### 1. GPU Memory Allocator for APUs
 
-Optimizes memory allocation for AMD Ryzen AI Max+ Pro 395 (or similar APUs) by configuring TTM page pool settings.
+Configures GPU memory allocation for AMD APUs with shared memory by setting the `amdgpu.gttsize` kernel parameter.
 
 **Main Script:** [`setup_vram_grub.sh`](setup_vram_grub.sh)
 
 - Detects system RAM automatically from `/proc/meminfo`
-- Calculates recommended VRAM ceiling (leaves 16GB for system/CPU)
+- Calculates recommended GPU memory ceiling (leaves 16GB for system/CPU)
 - Warns if allocation exceeds 90% of total RAM
-- Automatically updates GRUB configuration
+- Automatically updates GRUB configuration with `amdgpu.gttsize`
 - Supports multiple distributions (Debian, Ubuntu, Fedora, Arch, CachyOS, CentOS/RHEL)
 
 **Usage:**
@@ -22,14 +22,16 @@ sudo ./setup_vram_grub.sh [target_ram_gb]
 ```
 
 **Prerequisites:**
-- Linux operating system
+- Linux operating system (APU-based)
 - Root access (required for GRUB modification)
-- AMD GPU driver with TTM support
+- AMD APU with shared GPU/CPU memory (Ryzen AI, Ryzen with Radeon Graphics)
 
 **Notes:**
 - Always backup your GRUB config before making changes
 - After modifying GRUB, the script automatically runs `update-grub` or `grub2-mkconfig`
+- This tool is for APUs with shared memory only, not discrete GPUs
 - Allocating >90% of RAM to GPU may cause system instability or OOM kills
+- Reboot required for changes to take effect
 
 ---
 
@@ -75,9 +77,9 @@ Interactive shell script for managing Ollama models with a menu-driven interface
 **How It Works:**
 Script generates a temporary Modelfile with custom parameters and runs `ollama create`:
 ```
-FROM <base-model>
-PARAMETER context_window <size>
-PARAMETER temperature <value>
+from <base-model>
+parameter num_ctx <size>
+parameter temperature <value>
 ```
 
 ---
@@ -229,7 +231,7 @@ The script installs all required ROCm userspace libraries, configures the runtim
 
 ## Supported Hardware
 
-- **Memory Optimizer:** AMD Ryzen AI Max+ Pro 395 (and other APUs with shared memory)
+- **GPU Memory Allocator:** AMD APUs with shared memory (Ryzen AI Max+ Pro 395, Ryzen 7/5 with Radeon Graphics, etc.)
 - **Ollama Model Manager:** Any system running Ollama (Linux, macOS, Windows with WSL2)
 - **AMD System Tools:** AMD CPU + AMD GPU systems with ROCm installed
 - **ROCm + Ollama Initializer:** CachyOS and Arch-based distributions with an AMD GPU (RDNA 2 / RDNA 3 recommended)

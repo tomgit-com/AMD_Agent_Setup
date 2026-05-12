@@ -1,11 +1,10 @@
 #!/bin/bash
 
-# Script to add virtual VRAM configuration to GRUB
+# Script to configure GPU memory allocation for AMD APUs via GRUB
+# Uses modern amdgpu.gttsize kernel parameter (replaces deprecated TTM)
 # Supports: Debian, Ubuntu, Fedora, Arch, CachyOS, CentOS/RHEL
 
-
 SYSTEM_RAM_RESERVE=16
-PAGE_SIZE_KB=4
 
 get_physical_ram_gb() {
     if [ -f /proc/meminfo ]; then
@@ -76,9 +75,9 @@ update_grub_centos() {
     fi
 }
 
-calculate_pages() {
+calculate_gttsize_mib() {
     local gb=$1
-    echo $(( (gb * 1024 * 1024) / PAGE_SIZE_KB ))
+    echo $(( gb * 1024 ))
 }
 
 main() {
@@ -93,7 +92,7 @@ main() {
     distro=$(detect_distribution)
     total_ram=$(get_physical_ram_gb)
     
-    echo "--- AMD Ryzen AI Max+ Pro 395 Optimizer ---"
+    echo "--- AMD APU GPU Memory Allocator (amdgpu.gttsize) ---"
     
     if [ -n "$total_ram" ]; then
         echo "Detected System RAM: ${total_ram} GB"
@@ -133,27 +132,27 @@ main() {
             fi
         fi
         
-        pages=$(calculate_pages ${target_gb%%.*})
-        
+        gttsize_mib=$(calculate_gttsize_mib ${target_gb%%.*})
+
         grub_file=$(get_grub_file $distro)
-        
+
         echo ""
         echo "============================================"
         echo "  TARGET: ${target_gb} GB"
-        echo "  PAGES:  $pages"
+        echo "  GTT SIZE: ${gttsize_mib} MiB"
         echo "============================================"
         echo ""
         echo "Adding to $grub_file:"
-        echo "  ttm.pages_limit=$pages ttm.page_pool_size=$pages"
+        echo "  amdgpu.gttsize=$gttsize_mib"
         echo ""
-        
+
         read -p "Apply these changes? (y/N): " confirm
         if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
             echo "Aborted."
             exit 0
         fi
-        
-        sed -i 's/\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 ttm.pages_limit='"$pages"' ttm.page_pool_size='"$pages"'"' "$grub_file"
+
+        sed -i 's/\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 amdgpu.gttsize='"$gttsize_mib"'"' "$grub_file"
         
         echo "Updating GRUB for $distro..."
         case "$distro" in
